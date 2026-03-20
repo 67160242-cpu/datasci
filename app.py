@@ -95,29 +95,34 @@ fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'],
                          mode='lines+markers', name='วันนี้ (Today)', line=dict(color='#1f77b4', width=3)))
 
 # เตรียมข้อมูลให้ AI ทาย
-# 1. เตรียมข้อมูลทุกอย่างที่ "อาจจะ" ต้องใช้
+# 1. เตรียมข้อมูลพื้นฐานเท่าที่เรามี
 temp_data = pd.DataFrame({
     'Hour': df_today['Hour'],
     'DayOfWeek': [selected_date.dayofweek] * 24,
     'IsWeekend': [1 if selected_date.dayofweek >= 5 else 0] * 24,
-    'Month': [selected_date.month] * 24,  # แอบเพิ่ม Month เข้าไปเผื่อโมเดลต้องการ
     'Power_Lag1': df_today['Power_Today'].shift(1).fillna(df_yesterday['Power_Yesterday'].iloc[-1]).values,
     'Power_Lag24': df_yesterday['Power_Yesterday'].values
 })
 
-# 2. ถามโมเดลว่าตอนเรียน เรียนวิชาอะไรมาบ้าง (ดึงชื่อ Features)
+# 2. ถามโมเดลว่าต้องการคอลัมน์ชื่ออะไรบ้าง
 try:
     expected_features = model.feature_names_in_
 except AttributeError:
     expected_features = model.get_booster().feature_names
 
-# 3. คัดกรองเฉพาะคอลัมน์ที่โมเดลต้องการ และเรียงลำดับให้เป๊ะ!
+# 3. ไฮไลท์สำคัญ!: คอลัมน์ไหนที่ AI อยากได้แต่เราไม่มี ให้สร้างขึ้นมาแล้วใส่เลข 0
+for col in expected_features:
+    if col not in temp_data.columns:
+        temp_data[col] = 0
+
+# 4. จัดเรียงคอลัมน์ให้ตรงใจโมเดลเป๊ะๆ
 input_data = temp_data[expected_features]
 
-# ให้ AI ทายค่าปกติ และหา Error
+# 5. ให้ AI ทายค่าปกติ และหา Error
 expected_powers = model.predict(input_data)
 errors = df_today['Power_Today'] - expected_powers
 
-# ผิดปกติ = ค่าความคลาดเคลื่อน (ไม่ว่าจะบวกหรือลบ) มีขนาดใหญ่กว่า safe_threshold
+# ผิดปกติ = ค่าความคลาดเคลื่อนมีขนาดใหญ่กว่า safe_threshold
 anomalies = np.abs(errors) > safe_threshold
+
 # ==========================================
