@@ -1,95 +1,71 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import datetime
+import plotly.graph_objects as go 
+import numpy as np
 
 # 1. ตั้งค่าหน้าเพจ
-st.set_page_config(page_title="Smart Home AI", page_icon="🏡", layout="wide")
+st.set_page_config(page_title="Home Energy Master (Debug Mode)", page_icon="🛠️", layout="wide")
 
-# 2. โหลดสมอง AI และเกณฑ์การแจ้งเตือน
-@st.cache_resource
-def load_model_and_threshold():
-    model = joblib.load('smart_home_xgb.pkl')
-    threshold = joblib.load('smart_threshold.pkl')
-    return model, threshold
-
-model, threshold = load_model_and_threshold()
-
-# 3. ส่วนหัวของเว็บ
-st.title('🏡 ระบบ AI ผู้พิทักษ์บ้าน (Energy Anomaly Detector)')
-st.write('วิเคราะห์ความผิดปกติและเปรียบเทียบการใช้ไฟฟ้าแบบ Real-time')
+st.title('🛠️ Home Energy Master: โหมดทดสอบหน้าเว็บ (ปิด AI ชั่วคราว)')
 st.markdown("---")
 
-# 4. Sidebar สำหรับรับข้อมูล
-st.sidebar.header('⚙️ การตั้งค่าข้อมูล')
-current_hour = st.sidebar.slider('ชั่วโมงปัจจุบัน (Hour)', 0, 23, 12)
-day_of_week = st.sidebar.slider('วันในสัปดาห์ (0=จันทร์, 6=อาทิตย์)', 0, 6, 0)
-is_weekend = 1 if day_of_week >= 5 else 0
-
+# 2. แถบด้านข้าง (Sidebar)
+st.sidebar.header('⚙️ ตั้งค่าระบบ')
+unit_cost = st.sidebar.number_input('💰 ค่าไฟฟ้าต่อหน่วย (บาท)', value=4.0, step=0.1, min_value=0.0)
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 ข้อมูลการใช้ไฟย้อนหลัง (kW)")
-power_lag1 = st.sidebar.number_input('การใช้ไฟ 1 ชั่วโมงที่แล้ว', value=1.20, step=0.1)
-power_lag24 = st.sidebar.number_input('การใช้ไฟเมื่อวานเวลานี้', value=1.10, step=0.1)
+st.sidebar.subheader("📅 เลือกวันเพื่อดูข้อมูล")
+selected_date = st.sidebar.date_input('เลือกวันที่ต้องการตรวจสอบ', 
+                                    value=pd.to_datetime('2010-07-15'),
+                                    min_value=pd.to_datetime('2010-01-01'),
+                                    max_value=pd.to_datetime('2010-12-31'))
 
-# 5. ส่วนหลัก: ตรวจสอบการใช้ไฟ
-col_main, col_calc = st.columns([2, 1])
-
-with col_main:
-    st.subheader("⚡ ตรวจสอบการใช้ไฟ ณ ปัจจุบัน")
-    current_power = st.number_input('กรอกปริมาณการใช้ไฟในชั่วโมงนี้ (kW):', value=1.50, step=0.1)
-
-    # เตรียมข้อมูลส่งให้ AI
-    input_data = pd.DataFrame({
-        'Hour': [current_hour],
-        'DayOfWeek': [day_of_week],
-        'IsWeekend': [is_weekend],
-        'Power_Lag1': [power_lag1],
-        'Power_Lag24': [power_lag24]
-    })
-
-    if st.button('🔍 สแกนหาความผิดปกติ', type='primary'):
-        expected_power = model.predict(input_data)[0]
-        error = current_power - expected_power
-        
-        # --- ส่วนแสดงกราฟเปรียบเทียบ ---
-        st.markdown("### 📊 เปรียบเทียบการใช้ไฟ (เมื่อวาน vs วันนี้)")
-        chart_data = pd.DataFrame({
-            'ช่วงเวลา': ['เมื่อวาน (เวลานี้)', 'วันนี้ (ปัจจุบัน)'],
-            'ปริมาณไฟฟ้า (kW)': [power_lag24, current_power]
-        }).set_index('ช่วงเวลา')
-        
-        st.bar_chart(chart_data)
-
-        # ผลการวิเคราะห์แบบ Metric
-        m1, m2, m3 = st.columns(3)
-        m1.metric("ใช้จริง", f"{current_power:.2f} kW")
-        m2.metric("AI คาดการณ์", f"{expected_power:.2f} kW")
-        m3.metric("ส่วนต่าง", f"{error:.2f} kW", delta=f"{error:.2f}", delta_color="inverse")
-
-        # Logic แจ้งเตือน
-        if error > threshold:
-            st.error(f'🚨 **แจ้งเตือน!** พบการใช้ไฟสูงผิดปกติ (เกินเกณฑ์ {threshold:.2f} kW)')
-        elif error < -threshold:
-            st.info(f'📉 **ข้อสังเกต:** การใช้ไฟน้อยกว่าปกติ')
-        else:
-            st.success(f'✅ **สถานะปกติ:** การใช้ไฟอยู่ในเกณฑ์มาตรฐาน')
-
-with col_calc:
-    # 6. ส่วนคำนวณค่าไฟรายเดือน (ประมาณการ)
-    st.subheader("💰 ประมาณการค่าไฟ")
-    unit_price = 4.42 # ค่าไฟเฉลี่ยต่อหน่วย (บาท) รวม FT
+# 3. จำลองข้อมูล (เหมือนเดิมเป๊ะ)
+@st.cache_data
+def get_simulated_data(date, unit_cost):
+    hours = np.arange(24)
+    base_load = (np.sin((hours - 3) * np.pi / 12) * 0.4) + 0.8
+    weekend_mult = 1.2 if date.dayofweek >= 5 else 1.0
     
-    # คำนวณเบื้องต้น: สมมติว่าใช้ไฟเรทนี้เฉลี่ยทั้งวัน (24 ชม.) เป็นเวลา 30 วัน
-    daily_est = current_power * 24
-    monthly_units = daily_est * 30
-    monthly_cost = monthly_units * unit_price
+    power_yesterday = (base_load * weekend_mult) + np.random.normal(0, 0.05, 24)
+    df_yesterday = pd.DataFrame({'Hour': hours, 'Power_Yesterday': np.maximum(0.2, power_yesterday)})
     
-    st.info(f"""
-    **หากใช้ไฟระดับนี้ต่อเนื่อง:**
-    - หน่วยไฟต่อเดือน: `{monthly_units:.2f}` Units
-    - ค่าไฟประมาณการ: **`{monthly_cost:,.2;f}` บาท/เดือน**
-    """)
-    st.caption(f"*คำนวณจากอัตราเฉลี่ย {unit_price} บาท/หน่วย")
+    power_today = (base_load * weekend_mult) + np.random.normal(0, 0.08, 24)
+    
+    # จำลองไฟเกิน (วันที่หาร 3 ลงตัว) และไฟดับ (วันที่ 13)
+    if date.day % 3 == 0: 
+        power_today[14:19] += 2.1 
+    if date.day == 13:
+        power_today[20:23] = 0.05 
+        
+    df_today = pd.DataFrame({'Hour': hours, 'Power_Today': np.maximum(0.2, power_today)})
+    return df_today, df_yesterday
 
+df_today, df_yesterday = get_simulated_data(selected_date, unit_cost)
+
+# 4. Dashboard สรุปภาพรวม
+st.subheader(f"📊 สรุปภาพรวมพลังงานประจำวันที่ {selected_date.strftime('%d %B %Y')}")
+total_power_today = df_today['Power_Today'].sum()
+total_cost_today = total_power_today * unit_cost
+power_diff = total_power_today - df_yesterday['Power_Yesterday'].sum()
+
+col1, col2, col3 = st.columns(3)
+col1.metric("⚡ การใช้ไฟรวมวันนี้", f"{total_power_today:.2f} kWh", f"{power_diff:.2f} kWh vs เมื่อวาน")
+col2.metric("💰 ประมาณการค่าไฟวันนี้", f"{total_cost_today:.2f} บาท", f"(คิดที่ {unit_cost} บาท/หน่วย)")
+col3.metric("📉 การใช้ไฟเฉลี่ยรายชั่วโมง", f"{df_today['Power_Today'].mean():.2f} kW")
 st.markdown("---")
-st.caption(f"เกณฑ์ความผิดปกติ (Threshold): {threshold:.4f} kW")
+
+# 5. กราฟเปรียบเทียบ (ไม่มีจุดแดงของ AI)
+st.subheader("📈 กราฟเปรียบเทียบการใช้ไฟชั่วโมงต่อชั่วโมง (ทดสอบ UI)")
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(x=df_yesterday['Hour'], y=df_yesterday['Power_Yesterday'], 
+                         mode='lines', name='เมื่อวาน (Yesterday)', line=dict(color='gray', width=2, dash='dash')))
+fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'], 
+                         mode='lines+markers', name='วันนี้ (Today)', line=dict(color='#1f77b4', width=3)))
+
+fig.update_layout(title="เปรียบเทียบพฤติกรรมการใช้ไฟ (ปิดระบบแจ้งเตือน AI)", 
+                  xaxis_title="ชั่วโมง (Hour)", yaxis_title="ปริมาณการใช้ไฟ (กิโลวัตต์)", 
+                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+st.plotly_chart(fig, use_container_width=True)
+
+st.success("✅ ถ้าคุณเห็นกล่องข้อความนี้และกราฟด้านบนแสดงผลได้ปกติ แปลว่าโค้ดหน้าเว็บ Streamlit ทำงานสมบูรณ์ 100% ครับ!")
