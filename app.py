@@ -99,12 +99,7 @@ fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'],
 # ==========================================
 
 # ลิสต์รายชื่อคอลัมน์ทั้ง 13 ตัวที่ AI จำมาจากตอนเทรน
-expected_cols = [
-    'Datetime', 'Global_active_power', 'Global_reactive_power', 
-    'Voltage', 'Global_intensity', 'Sub_metering_1', 
-    'Sub_metering_2', 'Sub_metering_3', 'Power_Lag1', 
-    'Power_Lag24', 'Hour', 'DayOfWeek', 'IsWeekend'
-]
+expected_cols = ['Hour', 'DayOfWeek', 'IsWeekend', 'Voltage', 'Global_intensity']
 
 # สร้างกระดาษคำตอบที่มี 13 ช่อง (ใส่เลข 0 ไว้ก่อน)
 final_input = pd.DataFrame(0, index=np.arange(24), columns=expected_cols)
