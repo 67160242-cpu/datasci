@@ -94,66 +94,28 @@ fig.add_trace(go.Scatter(x=df_yesterday['Hour'], y=df_yesterday['Power_Yesterday
 fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'], 
                          mode='lines+markers', name='วันนี้ (Today)', line=dict(color='#1f77b4', width=3)))
 
-# ==========================================
-# เตรียมข้อมูลให้ AI ทาย (เวอร์ชันจัดให้ตามคำขอ 13 คอลัมน์ แก้ปัญหา feature_names mismatch)
-# ==========================================
+# 1. ให้ AI บอกมาเลยว่าตอนเทรน มันจำชื่อคอลัมน์อะไรไว้บ้าง และเรียงลำดับยังไง
+expected_cols = model.get_booster().feature_names
 
-# ลิสต์รายชื่อคอลัมน์ทั้ง 13 ตัวที่ AI จำมาจากตอนเทรน
-expected_cols = ['Hour', 'DayOfWeek', 'IsWeekend', 'Voltage', 'Global_intensity']
+# 2. สร้างกระดาษคำตอบเปล่าๆ ตามชื่อที่ AI บอกเป๊ะๆ (ใส่เลข 0.0 เพื่อบังคับเป็นทศนิยม)
+final_input = pd.DataFrame(0.0, index=np.arange(24), columns=expected_cols)
 
-# สร้างกระดาษคำตอบที่มี 13 ช่อง (ใส่เลข 0 ไว้ก่อน)
-final_input = pd.DataFrame(0, index=np.arange(24), columns=expected_cols)
+# 3. หยอดข้อมูล 5 ตัวที่เรามี ลงไปเฉพาะในช่องที่ AI เปิดรับ
+if 'Hour' in final_input.columns:
+    final_input['Hour'] = df_today['Hour']
+if 'DayOfWeek' in final_input.columns:
+    final_input['DayOfWeek'] = selected_date.dayofweek
+if 'IsWeekend' in final_input.columns:
+    final_input['IsWeekend'] = 1 if selected_date.dayofweek >= 5 else 0
+if 'Power_Lag1' in final_input.columns:
+    final_input['Power_Lag1'] = df_today['Power_Today'].shift(1).fillna(df_yesterday['Power_Yesterday'].iloc[-1]).values
+if 'Power_Lag24' in final_input.columns:
+    final_input['Power_Lag24'] = df_yesterday['Power_Yesterday'].values
 
-# หยอดข้อมูล 5 ตัวที่เรามีจริงๆ ลงไป
-final_input['Hour'] = df_today['Hour']
-final_input['DayOfWeek'] = selected_date.dayofweek
-final_input['IsWeekend'] = 1 if selected_date.dayofweek >= 5 else 0
-final_input['Power_Lag1'] = df_today['Power_Today'].shift(1).fillna(df_yesterday['Power_Yesterday'].iloc[-1]).values
-final_input['Power_Lag24'] = df_yesterday['Power_Yesterday'].values
-
-# ให้ AI ทายค่าปกติ และหา Error
+# 4. ให้ AI ทายค่า (คราวนี้คอลัมน์ตรงเป๊ะ ลำดับเป๊ะ ชนิดข้อมูลเป๊ะ 100%!)
 expected_powers = model.predict(final_input)
 errors = df_today['Power_Today'] - expected_powers
 
 # ผิดปกติ = ค่าความคลาดเคลื่อนมีขนาดใหญ่กว่า safe_threshold
 anomalies = np.abs(errors) > safe_threshold
 # ==========================================
-
-# พล็อตจุดกากบาทสีแดงบนกราฟ
-anomaly_hours = df_today[anomalies]
-fig.add_trace(go.Scatter(x=anomaly_hours['Hour'], y=anomaly_hours['Power_Today'], 
-                         mode='markers', name='⚠️ แจ้งเตือนไฟผิดปกติ!', marker=dict(color='red', size=12, symbol='x')))
-
-fig.update_layout(title=f"เปรียบเทียบพฤติกรรมการใช้ไฟ (เกณฑ์แจ้งเตือน AI = ±{safe_threshold:.2f} kW)", 
-                  xaxis_title="ชั่วโมง (Hour)", yaxis_title="ปริมาณการใช้ไฟ (กิโลวัตต์)", 
-                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-st.plotly_chart(fig, use_container_width=True)
-
-# 8. สรุปการแจ้งเตือน (แยกแยะ ไฟรั่ว vs ไฟดับ)
-st.markdown("---")
-st.subheader("🚨 รายงานความผิดปกติและคำแนะนำจาก AI")
-
-if any(anomalies):
-    for idx, is_anomaly in enumerate(anomalies):
-        if is_anomaly:
-            hour = df_today['Hour'].iloc[idx]
-            actual_power = df_today['Power_Today'].iloc[idx]
-            expected_power = expected_powers[idx]
-            error_val = errors.iloc[idx]
-            
-            # กรณีที่ 1: ใช้ไฟเกิน (ไฟรั่ว / ลืมปิดอุปกรณ์)
-            if error_val > 0:
-                with st.expander(f"📈 พบการใช้ไฟสูงผิดปกติเวลา {hour:02d}:00 น. (ใช้ไฟเกินไป {error_val:.2f} kW)", expanded=True):
-                    st.write(f"- **การใช้ไฟจริง:** {actual_power:.2f} kW | **AI คาดการณ์:** {expected_power:.2f} kW")
-                    st.warning(f"🔍 **AI ประเมินว่า:** {analyze_appliance(error_val)}")
-            
-            # กรณีที่ 2: ใช้ไฟน้อยผิดปกติ (ไฟดับ / ไม่อยู่บ้าน / เซ็นเซอร์พัง)
-            else:
-                with st.expander(f"📉 พบการใช้ไฟต่ำผิดปกติเวลา {hour:02d}:00 น. (ไฟหายไป {abs(error_val):.2f} kW)", expanded=True):
-                    st.write(f"- **การใช้ไฟจริง:** {actual_power:.2f} kW | **AI คาดการณ์:** {expected_power:.2f} kW")
-                    st.info(f"💡 **AI ประเมินว่า:** การใช้ไฟน้อยกว่าปกติมาก อาจเกิดจาก **ไฟดับในพื้นที่, ไม่อยู่บ้าน, หรือเซ็นเซอร์ขัดข้อง**")
-else:
-    st.success("✅ **เยี่ยมมาก!** วันนี้ไม่มีการใช้ไฟที่ผิดปกติ การใช้พลังงานของคุณอยู่ในเกณฑ์มาตรฐานครับ")
-
-# ทริคสำหรับเทสระบบ
-st.info("💡 ทริคทดสอบระบบ: \n- เลือกวันที่หารด้วย 3 ลงตัว (เช่น 15, 18, 21) เพื่อดู AI จับผิด **'การลืมปิดอุปกรณ์'** 📈\n- เลือกวันที่ 13 เพื่อดู AI จับผิดสถานการณ์ **'ไฟดับตอนกลางคืน'** 📉")
