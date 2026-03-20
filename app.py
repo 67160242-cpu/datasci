@@ -1,81 +1,114 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import datetime
+import plotly.graph_objects as go 
+import numpy as np
 
 # 1. ตั้งค่าหน้าเพจ
-st.set_page_config(page_title="Smart Home AI", page_icon="🏡", layout="centered")
+st.set_page_config(page_title="Home Energy Master", page_icon="⚡", layout="wide")
 
+def analyze_appliance(error_kw):
+    if error_kw >= 3.0:
+        return "🔥 **อันตรายมาก!** (เกิน 3.0 kW) น่าจะเป็นเครื่องทำน้ำอุ่นเปิดทิ้งไว้, เตาอบไฟฟ้า หรือ แอร์ขนาดใหญ่"
+    elif error_kw >= 1.5:
+        return "♨️ **ระดับกลาง** (1.5 - 3.0 kW) น่าจะเป็นเตารีด, หม้อต้มน้ำร้อน, ไมโครเวฟ หรือ แอร์ห้องนอน"
+    elif error_kw >= 0.5:
+        return "📺 **ระดับเริ่มต้น** (0.5 - 1.5 kW) น่าจะเป็นทีวีจอใหญ่, คอมพิวเตอร์ หรือตู้เย็นปิดไม่สนิท"
+    else:
+        return "💡 **เล็กน้อย** (ต่ำกว่า 0.5 kW) อาจจะลืมปิดพัดลม หรือหลอดไฟหลายดวง"
 
-# 2. โหลดสมอง AI และเกณฑ์การแจ้งเตือน
-@st.cache_resource  # ใช้ Cache เพื่อไม่ให้เว็บโหลดโมเดลใหม่ทุกครั้งที่ขยับเมาส์
+# 2. โหลดโมเดล "ของแท้" ที่คุณเทรนมา
+@st.cache_resource
 def load_model_and_threshold():
     model = joblib.load('smart_home_xgb.pkl')
     threshold = joblib.load('smart_threshold.pkl')
     return model, threshold
 
-
 model, threshold = load_model_and_threshold()
 
-# 3. ส่วนหัวของเว็บ
-st.title('🏡 ระบบ AI ผู้พิทักษ์บ้าน (Energy Anomaly Detector)')
-st.write(
-    'แอปพลิเคชันนี้จะช่วยตรวจสอบว่า **"การใช้ไฟของคุณในชั่วโมงนี้ ผิดปกติหรือไม่?"** (มีไฟรั่ว หรือลืมปิดแอร์หรือเปล่า) โดยให้ AI เปรียบเทียบกับพฤติกรรมการใช้ไฟในอดีตของคุณ')
+st.title('⚡ Home Energy Master: ระบบบริหารจัดการพลังงานบ้านอัจฉริยะ')
 st.markdown("---")
 
-# 4. แถบด้านข้างสำหรับรับข้อมูล (Sidebar)
-st.sidebar.header('⚙️ ข้อมูลจำเพาะของชั่วโมงนี้')
-
-# จำลองการดึงเวลาปัจจุบัน (หรือให้ผู้ใช้เลือกเอง)
-current_hour = st.sidebar.slider('ชั่วโมงปัจจุบัน (Hour)', 0, 23, 12)
-day_of_week = st.sidebar.slider('วันในสัปดาห์ (0=จันทร์, 6=อาทิตย์)', 0, 6, 0)
-is_weekend = 1 if day_of_week >= 5 else 0
-st.sidebar.info(f"วันหยุดสุดสัปดาห์: {'ใช่ (1)' if is_weekend else 'ไม่ใช่ (0)'}")
-
+st.sidebar.header('⚙️ ตั้งค่าระบบ')
+unit_cost = st.sidebar.number_input('💰 ค่าไฟฟ้าต่อหน่วย (บาท)', value=4.0, step=0.1, min_value=0.0)
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 ข้อมูลการใช้ไฟย้อนหลัง (kW)")
-power_lag1 = st.sidebar.number_input('การใช้ไฟ 1 ชั่วโมงที่แล้ว', value=1.20, step=0.1)
-power_lag24 = st.sidebar.number_input('การใช้ไฟเมื่อวานเวลานี้', value=1.10, step=0.1)
+st.sidebar.subheader("📅 เลือกวันเพื่อดูข้อมูล")
+selected_date = st.sidebar.date_input('เลือกวันที่ต้องการตรวจสอบ (ข้อมูลจำลองปี 2010)', 
+                                    value=pd.to_datetime('2010-07-15'),
+                                    min_value=pd.to_datetime('2010-01-01'),
+                                    max_value=pd.to_datetime('2010-12-31'))
 
-# 5. ส่วนหลักของเว็บ: กรอกค่าไฟปัจจุบันเพื่อตรวจสอบ
-st.subheader("⚡ ตรวจสอบการใช้ไฟ ณ ปัจจุบัน")
-current_power = st.number_input('กรอกปริมาณการใช้ไฟในชั่วโมงนี้ (กิโลวัตต์) เพื่อให้ AI ตรวจสอบ:', value=1.50, step=0.1)
+# 3. จำลองข้อมูลให้เนียนไปกับสมอง AI ของจริง
+@st.cache_data
+def get_simulated_data(date, unit_cost):
+    hours = np.arange(24)
+    
+    # ปรับ Base Load ให้ลดลงมาใกล้เคียงของจริง (ประมาณ 0.5 - 1.2 kW)
+    base_load = (np.sin((hours - 3) * np.pi / 12) * 0.4) + 0.8
+    weekend_mult = 1.2 if date.dayofweek >= 5 else 1.0
+    
+    power_yesterday = (base_load * weekend_mult) + np.random.normal(0, 0.05, 24)
+    df_yesterday = pd.DataFrame({'Hour': hours, 'Power_Yesterday': np.maximum(0.2, power_yesterday)})
+    
+    power_today = (base_load * weekend_mult) + np.random.normal(0, 0.08, 24)
+    
+    # สถานการณ์จำลอง: ถ้าเลือกวันที่หารด้วย 3 ลงตัว จะมีไฟรั่วตอนบ่าย
+    if date.day % 3 == 0: 
+        power_today[14:19] += 2.1 # แอบบวกไฟเพิ่ม 2.1 kW (จำลองเปิดแอร์ทิ้งไว้)
+        
+    df_today = pd.DataFrame({'Hour': hours, 'Power_Today': np.maximum(0.2, power_today)})
+    return df_today, df_yesterday
 
-# 6. เตรียมข้อมูลส่งให้ AI
+df_today, df_yesterday = get_simulated_data(selected_date, unit_cost)
+
+# 4. Dashboard
+st.subheader(f"📊 สรุปภาพรวมพลังงานประจำวันที่ {selected_date.strftime('%d %B %Y')}")
+total_power_today = df_today['Power_Today'].sum()
+total_cost_today = total_power_today * unit_cost
+power_diff = total_power_today - df_yesterday['Power_Yesterday'].sum()
+
+col1, col2, col3 = st.columns(3)
+col1.metric("⚡ การใช้ไฟรวมวันนี้", f"{total_power_today:.2f} kWh", f"{power_diff:.2f} kWh vs เมื่อวาน")
+col2.metric("💰 ประมาณการค่าไฟวันนี้", f"{total_cost_today:.2f} บาท", f"(คิดที่ {unit_cost} บาท/หน่วย)")
+col3.metric("📉 การใช้ไฟเฉลี่ยรายชั่วโมง", f"{df_today['Power_Today'].mean():.2f} kW")
+st.markdown("---")
+
+# 5. กราฟและ AI วิเคราะห์
+st.subheader("📈 กราฟเปรียบเทียบการใช้ไฟชั่วโมงต่อชั่วโมง")
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=df_yesterday['Hour'], y=df_yesterday['Power_Yesterday'], mode='lines', name='เมื่อวาน (Yesterday)', line=dict(color='gray', width=2, dash='dash')))
+fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'], mode='lines+markers', name='วันนี้ (Today)', line=dict(color='#1f77b4', width=3)))
+
 input_data = pd.DataFrame({
-    'Hour': [current_hour],
-    'DayOfWeek': [day_of_week],
-    'IsWeekend': [is_weekend],
-    'Power_Lag1': [power_lag1],
-    'Power_Lag24': [power_lag24]
+    'Hour': df_today['Hour'],
+    'DayOfWeek': [selected_date.dayofweek] * 24,
+    'IsWeekend': [1 if selected_date.dayofweek >= 5 else 0] * 24,
+    'Power_Lag1': df_today['Power_Today'].shift(1).fillna(df_yesterday['Power_Yesterday'].iloc[-1]).values,
+    'Power_Lag24': df_yesterday['Power_Yesterday'].values
 })
 
-# 7. ปุ่มกดตรวจสอบ
-if st.button('🔍 สแกนหาความผิดปกติ', type='primary'):
-    with st.spinner('AI กำลังวิเคราะห์พฤติกรรม...'):
+expected_powers = model.predict(input_data)
+errors = df_today['Power_Today'] - expected_powers
+anomalies = errors > threshold
 
-        # ให้ AI ทายว่าชั่วโมงนี้ "ควรจะ" ใช้ไฟเท่าไหร่
-        expected_power = model.predict(input_data)[0]
+anomaly_hours = df_today[anomalies]
+fig.add_trace(go.Scatter(x=anomaly_hours['Hour'], y=anomaly_hours['Power_Today'], mode='markers', name='⚠️ แจ้งเตือนไฟผิดปกติ!', marker=dict(color='red', size=12, symbol='x')))
 
-        # คำนวณความต่าง (ส่วนเกิน)
-        error = current_power - expected_power
+fig.update_layout(title=f"เปรียบเทียบพฤติกรรมการใช้ไฟ (Threshold AI = {threshold:.2f} kW)", xaxis_title="ชั่วโมง (Hour)", yaxis_title="ปริมาณการใช้ไฟ (กิโลวัตต์)", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("### 📊 ผลการวิเคราะห์:")
+st.markdown("---")
+st.subheader("🚨 รายงานความผิดปกติและคำแนะนำจาก AI")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("การใช้ไฟจริง", f"{current_power:.2f} kW")
-        col2.metric("ค่าที่ AI คาดการณ์", f"{expected_power:.2f} kW")
-        col3.metric("ส่วนเกิน (Error)", f"{error:.2f} kW", delta_color="inverse")
+if any(anomalies):
+    for idx, is_anomaly in enumerate(anomalies):
+        if is_anomaly:
+            hour = df_today['Hour'].iloc[idx]
+            error_val = errors.iloc[idx]
+            with st.expander(f"⚠️ พบความผิดปกติเวลา {hour:02d}:00 น. (ส่วนเกิน {error_val:.2f} kW)", expanded=True):
+                st.write(f"- **การใช้ไฟจริง:** {df_today['Power_Today'].iloc[idx]:.2f} kW | **AI คาดการณ์ว่าควรใช้แค่:** {expected_powers[idx]:.2f} kW")
+                st.warning(f"🔍 **AI ประเมินว่า:** {analyze_appliance(error_val)}")
+else:
+    st.success("✅ **เยี่ยมมาก!** วันนี้ไม่มีการใช้ไฟที่สูงผิดปกติ การใช้พลังงานของคุณอยู่ในเกณฑ์มาตรฐานครับ")
 
-        st.markdown("---")
-
-        # 🚨 ระบบตัดสินใจ (Logic)
-        if error > threshold:
-            st.error(f'🚨 **แจ้งเตือนอันตราย!** พบการใช้ไฟสูงผิดปกติ (เกินเกณฑ์ {threshold:.2f} kW)')
-            st.warning('👉 คำแนะนำ: โปรดตรวจสอบว่าคุณลืมปิดแอร์ เครื่องทำน้ำอุ่น หรือมีกระแสไฟฟ้ารั่วภายในบ้านหรือไม่!')
-        elif error < -threshold:
-            st.info(f'📉 **ข้อสังเกต:** การใช้ไฟน้อยกว่าปกติมาก (อาจเกิดจากไฟดับ หรือไม่อยู่บ้าน)')
-        else:
-            st.success(f'✅ **สถานะปกติ:** การใช้ไฟของคุณอยู่ในเกณฑ์มาตรฐานของบ้านหลังนี้ครับ')
-
-st.caption(f"หมายเหตุ: ระบบตั้งค่าเกณฑ์ความผิดปกติ (Threshold) ไว้ที่ส่วนเกิน {threshold:.4f} กิโลวัตต์")
+st.info("💡 ทริค: ลองเลือกวันที่หารด้วย 3 ลงตัว (เช่น 15, 18, 21) เพื่อดู AI จับผิดการลืมปิดอุปกรณ์ครับ!")
