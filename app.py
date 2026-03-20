@@ -95,8 +95,8 @@ fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power_Today'],
                          mode='lines+markers', name='วันนี้ (Today)', line=dict(color='#1f77b4', width=3)))
 
 # เตรียมข้อมูลให้ AI ทาย
-# 1. เตรียมข้อมูลพื้นฐานเท่าที่เรามี
-temp_data = pd.DataFrame({
+# 1. ข้อมูล 5 ตัวพื้นฐานที่เรามีแน่ๆ
+base_data = pd.DataFrame({
     'Hour': df_today['Hour'],
     'DayOfWeek': [selected_date.dayofweek] * 24,
     'IsWeekend': [1 if selected_date.dayofweek >= 5 else 0] * 24,
@@ -104,25 +104,31 @@ temp_data = pd.DataFrame({
     'Power_Lag24': df_yesterday['Power_Yesterday'].values
 })
 
-# 2. ถามโมเดลว่าต้องการคอลัมน์ชื่ออะไรบ้าง
-try:
-    expected_features = model.feature_names_in_
-except AttributeError:
-    expected_features = model.get_booster().feature_names
+# 2. ถามโมเดลว่าตอนเรียนหนังสือ เรียนมากี่วิชา? (ดึงชื่อ Features)
+expected_features = model.get_booster().feature_names
 
-# 3. ไฮไลท์สำคัญ!: คอลัมน์ไหนที่ AI อยากได้แต่เราไม่มี ให้สร้างขึ้นมาแล้วใส่เลข 0
-for col in expected_features:
-    if col not in temp_data.columns:
-        temp_data[col] = 0
+if expected_features is not None:
+    # 3. สร้างตารางว่างๆ เติมเลข 0 ตามจำนวนและชื่อคอลัมน์ที่โมเดลต้องการเป๊ะๆ
+    final_input = pd.DataFrame(0, index=np.arange(24), columns=expected_features)
+    
+    # 4. ตรวจสอบว่าโมเดลจำชื่อคอลัมน์เป็นรหัส f0, f1 หรือเปล่า
+    if expected_features[0] == 'f0':
+        # ถ้าเป็น f0, f1 ให้ใส่ข้อมูลเรียงตามลำดับไปเลย (ตัดปัญหาชื่อไม่ตรง)
+        cols_to_copy = min(base_data.shape[1], len(expected_features))
+        final_input.iloc[:, :cols_to_copy] = base_data.iloc[:, :cols_to_copy].values
+    else:
+        # ถ้าชื่อคอลัมน์เป็นตัวหนังสือปกติ ก็จับคู่ชื่อให้ตรงกัน
+        for col in base_data.columns:
+            if col in final_input.columns:
+                final_input[col] = base_data[col]
+                
+    # 5. สั่งโมเดลทำนาย (รอบนี้ตารางตรงใจโมเดล 100% แน่นอน)
+    expected_powers = model.predict(final_input)
+else:
+    # กรณีโมเดลไม่จำชื่อคอลัมน์เลย ให้โยนตัวเลขดิบๆ เข้าไป
+    expected_powers = model.predict(base_data.values)
 
-# 4. จัดเรียงคอลัมน์ให้ตรงใจโมเดลเป๊ะๆ
-input_data = temp_data[expected_features]
-
-# 5. ให้ AI ทายค่าปกติ และหา Error
-expected_powers = model.predict(input_data)
+# คำนวณ Error และหาจุดผิดปกติ
 errors = df_today['Power_Today'] - expected_powers
-
-# ผิดปกติ = ค่าความคลาดเคลื่อนมีขนาดใหญ่กว่า safe_threshold
 anomalies = np.abs(errors) > safe_threshold
-
 # ==========================================
