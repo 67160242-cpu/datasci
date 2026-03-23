@@ -1,9 +1,9 @@
-# ⚡ Home Energy Master: ระบบบริหารจัดการพลังงานบ้านอัจฉริยะ
+# ⚡ Home Energy Master ระบบบริหารจัดการพลังงานบ้านอัจฉริยะ
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
-![XGBoost](https://img.shields.io/badge/XGBoost-172434?style=for-the-badge&logo=xgboost&logoColor=white)
-![Plotly](https://img.shields.io/badge/Plotly-239120?style=for-the-badge&logo=plotly&logoColor=white)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-172434?style=for-the-badge&logo=xgboost&logoColor=white)](https://xgboost.readthedocs.io/)
+[![Plotly](https://img.shields.io/badge/Plotly-239120?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com/python/)
 
 โปรเจกต์แอปพลิเคชันสำหรับติดตาม เปรียบเทียบ และวิเคราะห์การใช้พลังงานไฟฟ้าภายในบ้าน (Smart Home) ทำงานร่วมกับโมเดล AI ในการตรวจจับความผิดปกติแบบเรียลไทม์ 
 แอปพลิเคชันนี้ถูกพัฒนาขึ้นเพื่อช่วยเจ้าของบ้านวิเคราะห์พฤติกรรมการใช้ไฟ และใช้ Machine Learning ตรวจจับเหตุการณ์ผิดปกติ (Anomaly Detection) เช่น **"การลืมเปิดเครื่องใช้ไฟฟ้าทิ้งไว้"** หรือ **"เหตุการณ์ไฟตก/ไฟดับ"** พร้อมระบบประเมินว่าความผิดปกตินั้นน่าจะเกิดจากอุปกรณ์ชนิดใด เพื่อลดความสูญเสียและเพิ่มความปลอดภัย
