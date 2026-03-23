@@ -107,12 +107,23 @@ st.markdown("---")
 st.subheader("📈 วิเคราะห์พฤติกรรมการใช้ไฟฟ้าด้วย AI")
 fig = go.Figure()
 
+# --- เส้นที่ 1: ข้อมูลเมื่อวาน (เส้นประสีเทา) ---
 fig.add_trace(go.Scatter(x=df_yesterday['Hour'], y=df_yesterday['Power'], 
-                         mode='lines', name='เมื่อวาน', line=dict(color='gray', dash='dash')))
-fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power'], 
-                         mode='lines+markers', name='วันนี้', line=dict(color='#1f77b4', width=3)))
+                         mode='lines', name='เมื่อวาน (Yesterday)', 
+                         line=dict(color='gray', width=1, dash='dash')))
 
-# AI Logic
+# --- เส้นที่ 2: AI คาดการณ์ (เส้นสีเขียวอ่อน) ---
+# นี่คือเส้นที่ได้จาก model.predict() ครับ
+fig.add_trace(go.Scatter(x=df_today['Hour'], y=expected_powers, 
+                         mode='lines', name='AI คาดการณ์ (Expected)', 
+                         line=dict(color='rgba(46, 204, 113, 0.5)', width=2)))
+
+# --- เส้นที่ 3: ข้อมูลจริงวันนี้ (เส้นสีน้ำเงิน) ---
+fig.add_trace(go.Scatter(x=df_today['Hour'], y=df_today['Power'], 
+                         mode='lines+markers', name='วันนี้ (Actual Today)', 
+                         line=dict(color='#1f77b4', width=3)))
+
+# --- ส่วนของการหา Anomaly (คงเดิม) ---
 expected_cols = ['Hour', 'DayOfWeek', 'IsWeekend', 'Power_Lag1', 'Power_Lag24']
 final_input = pd.DataFrame(0.0, index=np.arange(24), columns=expected_cols)
 final_input['Hour'] = df_today['Hour']
@@ -125,10 +136,19 @@ expected_powers = model.predict(final_input)
 errors = df_today['Power'] - expected_powers
 anomalies = np.abs(errors) > safe_threshold
 
-# มาร์คจุดผิดปกติ
+# --- มาร์คจุดสีแดงเมื่อผิดปกติ ---
 anomaly_hours = df_today[anomalies]
 fig.add_trace(go.Scatter(x=anomaly_hours['Hour'], y=anomaly_hours['Power'], 
-                         mode='markers', name='⚠️ แจ้งเตือนผิดปกติ!', marker=dict(color='red', size=12, symbol='x')))
+                         mode='markers', name='⚠️ ตรวจพบความผิดปกติ!', 
+                         marker=dict(color='red', size=12, symbol='x')))
+
+# ตั้งค่า Layout ให้สวยงาม
+fig.update_layout(
+    xaxis_title="ชั่วโมง (Hour)", 
+    yaxis_title="กิโลวัตต์ (kW)", 
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    hovermode="x unified" # ช่วยให้เอาเมาส์วางแล้วเห็นค่าทุกเส้นพร้อมกัน
+)
 
 st.plotly_chart(fig, use_container_width=True)
 
