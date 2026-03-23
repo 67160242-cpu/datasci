@@ -1,7 +1,7 @@
 # ⚡ Home Energy Master ระบบบริหารจัดการพลังงานบ้านอัจฉริยะ
 
-[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io/)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)]([https://www.python.org/](https://colab.research.google.com/drive/1zp9KXsehaFJ8P3w72dxeucAEj3-U-WTE?usp=sharing))
+[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)]([https://streamlit.io/](https://datasci-hucpbhfcpj2ngqf34p4zmq.streamlit.app/))
 [![XGBoost](https://img.shields.io/badge/XGBoost-172434?style=for-the-badge&logo=xgboost&logoColor=white)](https://xgboost.readthedocs.io/)
 [![Plotly](https://img.shields.io/badge/Plotly-239120?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com/python/)
 
