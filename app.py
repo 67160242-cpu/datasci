@@ -37,7 +37,7 @@ except Exception as e:
 
 # 3. ส่วนหัวของเว็บ
 st.title('⚡ Home Energy Master: ระบบบริหารจัดการพลังงานบ้านอัจฉริยะ')
-st.markdown(f"**ผู้พัฒนา:** คุณอรรณพ ศีผ่อง | วิชา: Data Science")
+st.markdown(f"**ผู้พัฒนา:** คุณอรรณพ ศรีผ่อง | วิชา: Data Science")
 st.markdown("---")
 
 # 4. แถบด้านข้าง (Sidebar)
